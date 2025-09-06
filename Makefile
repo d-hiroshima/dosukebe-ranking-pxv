@@ -35,3 +35,14 @@ setup:
 	make build
 	docker compose exec backend npm install
 	docker compose exec frontend npm install
+	docker compose exec backend npm run typecheck
+	docker compose exec frontend npm run typecheck
+
+.PHONY: typecheck
+typecheck:
+	docker compose exec backend npm run typecheck
+	docker compose exec frontend npm run typecheck
+
+.PHONY: dev-watch
+dev-watch:
+	docker compose exec backend npm run dev:watch
