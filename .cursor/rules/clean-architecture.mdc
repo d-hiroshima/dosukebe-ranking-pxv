@@ -1,0 +1,114 @@
+---
+globs: packages/backend/src/**
+description: Clean Architectureパターンの実装ガイドライン
+---
+
+# Clean Architecture 実装ガイドライン
+
+このプロジェクトではClean Architectureパターンを採用しています。
+
+## レイヤー構造
+
+### 1. Domain Layer (`src/domain/`)
+- **責務**: ビジネスロジックとエンティティの定義
+- **依存関係**: 他のレイヤーに依存しない
+- **ファイル構成**:
+  - `entities/` - ドメインエンティティ
+  - `repositories/` - リポジトリインターフェース
+
+### 2. Application Layer (`src/application/`)
+- **責務**: ユースケースの実装
+- **依存関係**: Domain層のみに依存
+- **ファイル構成**:
+  - `use-cases/` - ビジネスロジックの実装
+
+**例**: [RankingUseCase](mdc:packages/backend/src/application/use-cases/RankingUseCase.ts)
+```typescript
+export class RankingUseCase {
+  /**
+   * 指定したゲームのキャラクターランキングを生成します
+   */
+  async generateGameRanking(gameId: string): Promise<GameRanking | null> {
+    // ビジネスロジックの実装
+  }
+}
+```
+
+### 3. Infrastructure Layer (`src/infrastructure/`)
+- **責務**: 外部システムとの連携
+- **依存関係**: Domain層とApplication層に依存可能
+- **ファイル構成**:
+  - `database/` - データベース実装
+  - `pixiv/` - Pixiv API クライアント
+  - `data/` - データローダー
+  - `repositories/` - リポジトリ実装
+
+**例**: [PixivOAuthClient](mdc:packages/backend/src/infrastructure/pixiv/PixivOAuthClient.ts)
+
+### 4. Presentation Layer (`src/presentation/`)
+- **責務**: HTTP リクエスト/レスポンスの処理
+- **依存関係**: Application層に依存
+- **ファイル構成**:
+  - `controllers/` - HTTPコントローラー
+  - `routes/` - ルーティング設定
+  - `middleware/` - ミドルウェア
+
+**例**: [RankingController](mdc:packages/backend/src/presentation/controllers/RankingController.ts)
+
+## 依存関係の方向
+
+```
+Presentation → Application → Domain
+     ↓              ↓
+Infrastructure → Domain
+```
+
+## 実装規約
+
+### ユースケースクラス
+- 単一責任原則に従い、1つのユースケースクラスは1つの責務を持つ
+- メソッド名は動詞で始める（例: `generateGameRanking`, `getCharacterPostCount`）
+- エラーハンドリングを適切に実装
+- 日本語でのログ出力とエラーメッセージ
+
+### コントローラー
+- HTTPリクエスト/レスポンスの変換のみ行う
+- ビジネスロジックはユースケースに委譲
+- バリデーションはミドルウェアまたはコントローラーで実装
+
+### リポジトリパターン
+- インターフェースをDomain層で定義
+- 実装をInfrastructure層で提供
+- 依存性注入を使用してテスタビリティを確保
+
+### エラーハンドリング戦略
+- 各レイヤーで適切なエラーハンドリング
+- ユースケース層でビジネス例外をキャッチ
+- プレゼンテーション層でHTTPステータスコードに変換
+
+```typescript
+// ユースケース層
+try {
+  const result = await this.operation()
+  return result
+} catch (error) {
+  console.error('操作に失敗しました:', error)
+  throw error
+}
+
+// コントローラー層
+try {
+  const result = await useCase.execute()
+  res.json(result)
+} catch (error) {
+  res.status(500).json({ error: 'サーバーエラーが発生しました' })
+}
+```
+
+## ファイル命名規約
+
+- ユースケース: `*UseCase.ts`
+- コントローラー: `*Controller.ts`
+- リポジトリインターフェース: `I*Repository.ts`
+- リポジトリ実装: `*Repository.ts`
+- エンティティ: PascalCase

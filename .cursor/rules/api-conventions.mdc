@@ -1,0 +1,174 @@
+---
+globs: packages/backend/src/presentation/**
+description: REST API設計とルーティング規約
+---
+
+# API設計・ルーティング規約
+
+## RESTful API 設計原則
+
+### エンドポイント構造
+
+現在のAPI構造（[routes/index.ts](mdc:packages/backend/src/presentation/routes/index.ts)参照）：
+
+```
+GET  /health                    - ヘルスチェック
+GET  /auth/url                  - OAuth認証URL生成
+POST /auth/callback             - OAuth認証コールバック
+POST /auth/refresh              - リフレッシュトークン認証
+GET  /auth/status               - 認証状態確認
+GET  /games                     - ゲーム一覧取得
+GET  /games/:gameId/characters  - ゲーム別キャラクター一覧
+GET  /rankings                  - 全ランキング取得
+GET  /rankings/:gameId          - ゲーム別ランキング取得
+```
+
+### HTTPメソッド規約
+
+- **GET**: データの取得
+- **POST**: データの作成、認証処理
+- **PUT**: データの完全更新
+- **PATCH**: データの部分更新
+- **DELETE**: データの削除
+
+### URL命名規約
+
+- 複数形の名詞を使用（例: `/games`, `/rankings`）
+- kebab-case を使用（例: `/auth/callback`）
+- リソースの階層関係を表現（例: `/games/:gameId/characters`）
+
+## レスポンス形式
+
+### 成功レスポンス
+```typescript
+// 単一リソース
+{
+  "data": {
+    "id": "genshin",
+    "title": "原神",
+    "description": "..."
+  }
+}
+
+// 複数リソース
+{
+  "data": [
+    { "id": "1", "name": "キャラクター1" },
+    { "id": "2", "name": "キャラクター2" }
+  ],
+  "pagination": {
+    "total": 100,
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+### エラーレスポンス
+```typescript
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "入力データが不正です",
+    "details": [
+      {
+        "field": "gameId",
+        "message": "ゲームIDは必須です"
+      }
+    ]
+  }
+}
+```
+
+## コントローラー実装規約
+
+### 基本構造
+```typescript
+export class GameController {
+  /**
+   * ゲーム一覧を取得します
+   */
+  async getGames(req: Request, res: Response): Promise<void> {
+    try {
+      const games = await gameUseCase.getAllGames()
+      res.json({ data: games })
+    } catch (error) {
+      console.error('ゲーム一覧取得に失敗しました:', error)
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'サーバーエラーが発生しました'
+        }
+      })
+    }
+  }
+}
+```
+
+### エラーハンドリング
+- try-catch ブロックでエラーをキャッチ
+- 適切なHTTPステータスコードを返却
+- 日本語のエラーメッセージを使用
+- セキュリティを考慮し、内部エラーの詳細は隠蔽
+
+### バリデーション
+- express-validator を使用
+- リクエストパラメータとボディの検証
+- 日本語のバリデーションメッセージ
+
+```typescript
+import { body, param, validationResult } from 'express-validator'
+
+export const validateGameId = [
+  param('gameId').notEmpty().withMessage('ゲームIDは必須です'),
+  (req: Request, res: Response, next: NextFunction) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: '入力データが不正です',
+          details: errors.array()
+        }
+      })
+    }
+    next()
+  }
+]
+```
+
+## ステータスコード規約
+
+- **200**: 成功
+- **201**: 作成成功
+- **400**: リクエストエラー
+- **401**: 認証エラー
+- **403**: 認可エラー
+- **404**: リソースが見つからない
+- **500**: サーバーエラー
+
+## セキュリティ考慮事項
+
+### 認証・認可
+- Pixiv OAuth トークンの適切な管理
+- セッション管理の実装
+- CORS設定の適切な構成
+
+### データ検証
+- 入力データの検証とサニタイゼーション
+- SQLインジェクション対策（Prisma使用）
+- XSS対策
+
+## ミドルウェア規約
+
+### エラーハンドラー
+[errorHandler.ts](mdc:packages/backend/src/presentation/middleware/errorHandler.ts) でグローバルエラーハンドリング
+
+### CORS設定
+- フロントエンドからのリクエストを許可
+- 開発環境と本番環境で適切に設定
+
+### ログ出力
+- リクエスト/レスポンスのログ
+- エラーログの詳細記録
+- パフォーマンス監視

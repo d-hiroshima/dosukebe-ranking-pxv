@@ -1,0 +1,240 @@
+---
+globs: packages/frontend/src/**
+description: Next.js + React フロントエンド開発規約
+---
+
+# フロントエンド開発規約
+
+## Next.js App Router 規約
+
+### ディレクトリ構造
+```
+src/
+├── app/                 # App Router
+│   ├── layout.tsx      # ルートレイアウト
+│   ├── page.tsx        # ホームページ
+│   ├── games/          # ゲーム関連ページ
+│   └── api/            # API Routes
+├── components/         # 再利用可能コンポーネント
+│   ├── common/         # 共通コンポーネント
+│   ├── game/           # ゲーム関連コンポーネント
+│   └── ranking/        # ランキング関連コンポーネント
+├── hooks/              # カスタムフック
+├── lib/                # ユーティリティ
+└── styles/             # スタイル
+```
+
+### ページコンポーネント
+- ファイル名は `page.tsx`
+- デフォルトエクスポートを使用
+- Server Components を優先
+
+```typescript
+// app/games/page.tsx
+export default function GamesPage() {
+  return (
+    <div>
+      <h1>ゲーム一覧</h1>
+      {/* コンテンツ */}
+    </div>
+  )
+}
+```
+
+### レイアウトコンポーネント
+- 共通レイアウトは `layout.tsx`
+- メタデータの適切な設定
+
+```typescript
+// app/layout.tsx
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Dosukebe Ranking PXV',
+  description: 'キャラクターランキングシステム'
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="ja">
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+## React コンポーネント規約
+
+### コンポーネント設計
+- 単一責任原則に従う
+- Props の型を明確に定義
+- 適切なコンポーネント分割
+
+```typescript
+interface RankingCardProps {
+  ranking: CharacterRanking
+  onClick?: (character: Character) => void
+}
+
+export default function RankingCard({ ranking, onClick }: RankingCardProps) {
+  return (
+    <Card onClick={() => onClick?.(ranking.character)}>
+      <CardContent>
+        <Typography variant="h6">{ranking.character.name}</Typography>
+        <Typography variant="body2">
+          順位: {ranking.rank} | 投稿数: {ranking.postCount}
+        </Typography>
+      </CardContent>
+    </Card>
+  )
+}
+```
+
+### State管理
+- ローカル状態は `useState`
+- 複雑な状態は `useReducer`
+- グローバル状態が必要な場合はContext API
+
+### カスタムフック
+- ロジックの再利用のために作成
+- `use` プレフィックスを使用
+- 単一責任原則に従う
+
+```typescript
+// hooks/useRankings.ts
+export function useRankings(gameId?: string) {
+  const [rankings, setRankings] = useState<GameRanking[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchRankings()
+  }, [gameId])
+
+  const fetchRankings = async () => {
+    try {
+      setLoading(true)
+      const data = await apiClient.getRankings(gameId)
+      setRankings(data)
+    } catch (err) {
+      setError('ランキングの取得に失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { rankings, loading, error, refetch: fetchRankings }
+}
+```
+
+## Material-UI (MUI) 規約
+
+### テーマ設定
+- 統一されたテーマを使用
+- 日本語フォントの設定
+- レスポンシブデザインの考慮
+
+### コンポーネント使用
+- MUI コンポーネントを優先使用
+- カスタムスタイルは `sx` prop を使用
+- 一貫したスペーシングシステム
+
+```typescript
+import { Box, Typography, Button } from '@mui/material'
+
+export default function GameCard({ game }: { game: Game }) {
+  return (
+    <Box
+      sx={{
+        p: 2,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 1,
+        '&:hover': {
+          bgcolor: 'action.hover'
+        }
+      }}
+    >
+      <Typography variant="h6" gutterBottom>
+        {game.title}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {game.description}
+      </Typography>
+      <Button variant="contained" sx={{ mt: 2 }}>
+        ランキングを見る
+      </Button>
+    </Box>
+  )
+}
+```
+
+## API通信規約
+
+### APIクライアント
+- `lib/api/` にAPIクライアントを配置
+- エラーハンドリングの統一
+- 型安全性の確保
+
+```typescript
+// lib/api/client.ts
+import axios from 'axios'
+import { GameRanking, Character } from '@dosukebe-ranking-pxv/shared'
+
+const apiClient = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+})
+
+export const api = {
+  async getRankings(gameId?: string): Promise<GameRanking[]> {
+    const url = gameId ? `/rankings/${gameId}` : '/rankings'
+    const response = await apiClient.get(url)
+    return response.data.data
+  },
+
+  async getGames(): Promise<Game[]> {
+    const response = await apiClient.get('/games')
+    return response.data.data
+  }
+}
+```
+
+### データフェッチング
+- Server Components でのサーバーサイドフェッチング
+- Client Components での動的フェッチング
+- 適切なローディング状態の表示
+
+## パフォーマンス最適化
+
+### 画像最適化
+- Next.js Image コンポーネントを使用
+- 適切なサイズとフォーマットの指定
+
+### コード分割
+- 動的インポートの活用
+- ページ単位での自動分割
+
+### キャッシュ戦略
+- Next.js のキャッシュ機能を活用
+- SWR または React Query の検討
+
+## アクセシビリティ
+
+### セマンティックHTML
+- 適切なHTML要素の使用
+- ARIA属性の適切な設定
+
+### キーボードナビゲーション
+- フォーカス管理の実装
+- キーボードでの操作性確保
+
+## 国際化対応
+
+### 日本語対応
+- 日本語フォントの設定
+- 適切な文字エンコーディング
+- 日付・数値フォーマットの日本語対応

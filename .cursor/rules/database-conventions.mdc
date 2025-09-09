@@ -1,0 +1,253 @@
+---
+globs: packages/backend/prisma/**,packages/backend/src/infrastructure/database/**
+description: Prisma ORM とデータベース設計規約
+---
+
+# データベース・Prisma 規約
+
+## Prisma Schema 設計規約
+
+### モデル定義
+- モデル名は PascalCase（例: `Character`, `GameRanking`）
+- フィールド名は camelCase（例: `createdAt`, `pixivTag`）
+- 関連フィールドには適切な名前を付ける
+
+```prisma
+model Game {
+  id          String      @id
+  title       String
+  description String?
+  imageUrl    String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  characters  Character[]
+
+  @@map("games")
+}
+
+model Character {
+  id          String   @id @default(cuid())
+  name        String
+  gameId      String
+  pixivTag    String   @unique
+  description String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  game        Game     @relation(fields: [gameId], references: [id])
+
+  @@map("characters")
+}
+```
+
+### インデックス設計
+- 検索頻度の高いフィールドにインデックス
+- 複合インデックスの適切な設計
+- ユニーク制約の適用
+
+```prisma
+model Character {
+  // ...
+  pixivTag String @unique
+  gameId   String
+  
+  @@index([gameId])
+  @@index([pixivTag])
+}
+```
+
+### データ型の選択
+- `String` - テキストデータ
+- `Int` - 整数値
+- `DateTime` - 日時データ
+- `Boolean` - 真偽値
+- `Json` - JSON データ（必要な場合のみ）
+
+## マイグレーション規約
+
+### マイグレーションファイル
+- 意味のあるマイグレーション名を使用
+- 段階的なスキーマ変更
+- データ損失を避ける慎重な設計
+
+```bash
+# マイグレーション作成
+npx prisma migrate dev --name add_character_ranking_table
+
+# マイグレーション適用
+npx prisma migrate deploy
+```
+
+### スキーマ変更手順
+1. スキーマファイルの更新
+2. マイグレーションの生成
+3. マイグレーションの確認
+4. 本番環境への適用
+
+## リポジトリパターン実装
+
+### インターフェース定義
+```typescript
+// domain/repositories/ICharacterRepository.ts
+export interface ICharacterRepository {
+  findById(id: string): Promise<Character | null>
+  findByGameId(gameId: string): Promise<Character[]>
+  findByPixivTag(pixivTag: string): Promise<Character | null>
+  create(character: CreateCharacterDto): Promise<Character>
+  update(id: string, character: UpdateCharacterDto): Promise<Character>
+  delete(id: string): Promise<void>
+}
+```
+
+### Prisma実装
+```typescript
+// infrastructure/database/CharacterRepository.ts
+import { PrismaClient } from '@prisma/client'
+import { ICharacterRepository } from '../../domain/repositories/ICharacterRepository'
+
+export class CharacterRepository implements ICharacterRepository {
+  constructor(private prisma: PrismaClient) {}
+
+  async findById(id: string): Promise<Character | null> {
+    return await this.prisma.character.findUnique({
+      where: { id },
+      include: { game: true }
+    })
+  }
+
+  async findByGameId(gameId: string): Promise<Character[]> {
+    return await this.prisma.character.findMany({
+      where: { gameId },
+      include: { game: true },
+      orderBy: { name: 'asc' }
+    })
+  }
+
+  // その他のメソッド実装...
+}
+```
+
+## クエリ最適化
+
+### N+1問題の回避
+- `include` を使用した関連データの取得
+- 適切なクエリ設計
+
+```typescript
+// Bad - N+1問題
+const characters = await prisma.character.findMany()
+for (const character of characters) {
+  const game = await prisma.game.findUnique({
+    where: { id: character.gameId }
+  })
+}
+
+// Good - includeで一括取得
+const characters = await prisma.character.findMany({
+  include: { game: true }
+})
+```
+
+### ページネーション
+```typescript
+async findCharactersPaginated(
+  gameId: string,
+  page: number,
+  limit: number
+): Promise<{ characters: Character[]; total: number }> {
+  const skip = (page - 1) * limit
+
+  const [characters, total] = await Promise.all([
+    this.prisma.character.findMany({
+      where: { gameId },
+      skip,
+      take: limit,
+      include: { game: true }
+    }),
+    this.prisma.character.count({
+      where: { gameId }
+    })
+  ])
+
+  return { characters, total }
+}
+```
+
+## トランザクション処理
+
+### 単一トランザクション
+```typescript
+async createGameWithCharacters(
+  gameData: CreateGameDto,
+  charactersData: CreateCharacterDto[]
+): Promise<Game> {
+  return await this.prisma.$transaction(async (tx) => {
+    const game = await tx.game.create({
+      data: gameData
+    })
+
+    await tx.character.createMany({
+      data: charactersData.map(char => ({
+        ...char,
+        gameId: game.id
+      }))
+    })
+
+    return game
+  })
+}
+```
+
+### エラーハンドリング
+```typescript
+try {
+  const result = await this.prisma.$transaction(async (tx) => {
+    // トランザクション処理
+  })
+  return result
+} catch (error) {
+  console.error('データベース操作に失敗しました:', error)
+  throw new Error('データの保存中にエラーが発生しました')
+}
+```
+
+## パフォーマンス監視
+
+### クエリログ
+```typescript
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  log      = ["query", "info", "warn", "error"]
+}
+```
+
+### 接続プール設定
+```typescript
+// infrastructure/database/prisma.ts
+import { PrismaClient } from '@prisma/client'
+
+export const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL
+    }
+  },
+  log: ['query', 'error', 'warn'],
+})
+```
+
+## セキュリティ考慮事項
+
+### SQLインジェクション対策
+- Prismaの型安全なクエリを使用
+- 動的クエリの適切な実装
+
+### データバリデーション
+- スキーマレベルでの制約
+- アプリケーションレベルでの検証
+
+### 機密データの保護
+- パスワードのハッシュ化
+- APIキーの適切な管理
+- 環境変数の使用

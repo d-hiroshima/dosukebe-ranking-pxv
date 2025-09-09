@@ -1,0 +1,116 @@
+---
+globs: *.ts,*.tsx
+description: TypeScriptとReactコンポーネントのコーディング規約
+---
+
+# TypeScript & React コーディング規約
+
+## TypeScript 基本規約
+
+### 型定義
+- 明示的な型注釈を優先し、`any` の使用を避ける
+- インターフェースは大文字で始める（例: `Character`, `GameRanking`）
+- DTOクラスには `Dto` サフィックスを付ける（例: `CreateCharacterDto`）
+- 日付は `Date` 型を使用する
+
+### エクスポート/インポート
+- named export を優先する
+- デフォルトエクスポートは React コンポーネントのみで使用
+- 共有パッケージからのインポートは `@dosukebe-ranking-pxv/shared` を使用
+
+```typescript
+// Good
+import { Character, GameRanking } from '@dosukebe-ranking-pxv/shared'
+export const rankingUseCase = new RankingUseCase()
+
+// Bad
+import * as types from '@dosukebe-ranking-pxv/shared'
+export default rankingUseCase
+```
+
+### エラーハンドリング
+- try-catch ブロックでエラーをキャッチし、適切にログ出力
+- 日本語のエラーメッセージを使用
+- コンソールログは日本語で記述
+
+```typescript
+// Good
+try {
+  const result = await operation()
+} catch (error) {
+  console.error('操作に失敗しました:', error)
+  throw new Error('処理中にエラーが発生しました')
+}
+```
+
+## React コンポーネント規約
+
+### 関数コンポーネント
+- 関数宣言を使用（アロー関数ではなく）
+- TypeScript の型推論を活用
+
+```typescript
+// Good
+export default function Home() {
+  return <div>コンテンツ</div>
+}
+
+// Bad
+const Home = () => {
+  return <div>コンテンツ</div>
+}
+```
+
+### Props の型定義
+- インターフェースを使用してProps型を定義
+- オプショナルプロパティは `?` を使用
+
+```typescript
+interface ComponentProps {
+  title: string
+  description?: string
+  onSubmit: (data: FormData) => void
+}
+
+export default function Component({ title, description, onSubmit }: ComponentProps) {
+  // ...
+}
+```
+
+## ファイル命名規約
+
+### Backend
+- ユースケース: `*UseCase.ts`
+- コントローラー: `*Controller.ts`
+- リポジトリ: `*Repository.ts`
+- エンティティ: PascalCase（例: `Character.ts`）
+
+### Frontend
+- コンポーネント: PascalCase（例: `RankingList.tsx`）
+- フック: `use*.ts`
+- ユーティリティ: camelCase（例: `apiClient.ts`）
+
+### Shared
+- 型定義: camelCase（例: `character.ts`, `ranking.ts`）
+- 定数: camelCase（例: `api.ts`）
+
+## コメント規約
+
+- JSDoc形式でドキュメント化
+- 日本語でコメントを記述
+- 複雑なロジックには説明コメントを追加
+
+```typescript
+/**
+ * 指定したゲームのキャラクターランキングを生成します
+ * @param gameId ゲームID
+ * @returns ランキングデータまたはnull
+ */
+async generateGameRanking(gameId: string): Promise<GameRanking | null> {
+  // Pixiv APIが認証されているか確認
+  if (!pixivOAuthClient.isLoggedIn()) {
+    throw new Error('Pixiv APIが認証されていません')
+  }
+  // ...
+}
+```

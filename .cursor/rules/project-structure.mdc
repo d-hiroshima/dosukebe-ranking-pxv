@@ -1,0 +1,61 @@
+---
+alwaysApply: true
+description: プロジェクト構造とモノレポ設定に関するガイドライン
+---
+
+# Dosukebe Ranking PXV - プロジェクト構造ガイド
+
+このプロジェクトは、Pixiv APIを使用したキャラクターランキングシステムです。
+
+## モノレポ構造
+
+プロジェクトは3つのパッケージから構成されています：
+
+### Backend Package
+- **場所**: `packages/backend/`
+- **エントリーポイント**: [src/index.ts](mdc:packages/backend/src/index.ts)
+- **アーキテクチャ**: Clean Architecture パターン
+  - `src/application/` - ユースケース層
+  - `src/domain/` - ドメイン層
+  - `src/infrastructure/` - インフラ層
+  - `src/presentation/` - プレゼンテーション層
+- **主要コンポーネント**:
+  - [PixivOAuthClient](mdc:packages/backend/src/infrastructure/pixiv/PixivOAuthClient.ts) - Pixiv API認証
+  - [RankingUseCase](mdc:packages/backend/src/application/use-cases/RankingUseCase.ts) - ランキング生成ロジック
+  - [CharacterDataLoader](mdc:packages/backend/src/infrastructure/data/CharacterDataLoader.ts) - キャラクターデータ管理
+
+### Frontend Package
+- **場所**: `packages/frontend/`
+- **フレームワーク**: Next.js 14 (App Router)
+- **UI ライブラリ**: Material-UI (MUI)
+- **エントリーポイント**: [src/app/page.tsx](mdc:packages/frontend/src/app/page.tsx)
+
+### Shared Package
+- **場所**: `packages/shared/`
+- **目的**: 型定義と定数の共有
+- **エクスポート**: [src/index.ts](mdc:packages/shared/src/index.ts)
+- **主要な型定義**:
+  - [Character](mdc:packages/shared/src/types/character.ts) - キャラクター関連の型
+  - [Game](mdc:packages/shared/src/types/game.ts) - ゲーム関連の型
+  - [Ranking](mdc:packages/shared/src/types/ranking.ts) - ランキング関連の型
+
+## 開発環境
+
+- **Docker Compose**: [docker-compose.yml](mdc:docker-compose.yml)
+- **Makefile**: [Makefile](mdc:Makefile) - 共通タスク
+- **Node.js**: >=18.0.0
+- **TypeScript**: ^5.0.0
+
+## データベース
+
+- **ORM**: Prisma
+- **スキーマ**: [packages/backend/prisma/schema.prisma](mdc:packages/backend/prisma/schema.prisma)
+
+## API エンドポイント
+
+APIルートは [packages/backend/src/presentation/routes/index.ts](mdc:packages/backend/src/presentation/routes/index.ts) で定義されています：
+
+- `/health` - ヘルスチェック
+- `/auth/*` - Pixiv OAuth認証
+- `/games/*` - ゲーム・キャラクター情報
+- `/rankings/*` - ランキングデータ
